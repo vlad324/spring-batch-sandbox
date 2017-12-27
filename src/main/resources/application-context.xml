@@ -1,0 +1,63 @@
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:jdbc="http://www.springframework.org/schema/jdbc"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:batch="http://www.springframework.org/schema/batch"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+       http://www.springframework.org/schema/beans/spring-beans.xsd
+       http://www.springframework.org/schema/jdbc
+       http://www.springframework.org/schema/jdbc/spring-jdbc.xsd
+       http://www.springframework.org/schema/context
+       http://www.springframework.org/schema/context/spring-context.xsd
+       http://www.springframework.org/schema/batch
+       http://www.springframework.org/schema/batch/spring-batch.xsd">
+
+    <context:property-placeholder location="classpath:application.properties" />
+
+    <!-- CONFIG DB -->
+
+    <jdbc:embedded-database id="dataSource" type="H2">
+        <jdbc:script location="${batch.drop.script}" />
+        <jdbc:script location="${batch.schema.script}" />
+    </jdbc:embedded-database>
+
+    <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+        <property name="dataSource" ref="dataSource" />
+    </bean>
+
+    <!-- CONFIG READER -->
+    <bean id="reader" class="io.github.vlad324.batch.UrlItemReader" />
+
+    <!-- CONFIG WRITER -->
+    <bean id="writer" class="io.github.vlad324.batch.ResultConsoleItemWriter" />
+
+    <!-- CONFIG PROCESSOR -->
+    <bean id="restTemplate" class="org.springframework.web.client.RestTemplate" />
+    <bean id="processor" class="io.github.vlad324.batch.RequestItemProcessor">
+        <property name="restTemplate" ref="restTemplate" />
+    </bean>
+
+    <!-- CONFIG JOB REPOSITORY -->
+    <batch:job-repository id="jobRepository" data-source="dataSource" transaction-manager="transactionManager" />
+
+    <!-- CONFIG THREAD POOL -->
+    <bean id="taskExecutor" class="io.github.vlad324.executor.CustomTaskExecutor">
+        <property name="delay" value="${delay.before.request}" />
+        <property name="delayTimeUnit" value="${delay.before.request.unit}" />
+    </bean>
+
+    <!-- CONFIG JOB -->
+    <batch:job id="generateReport">
+        <batch:step id="makeRequestStep">
+            <batch:tasklet task-executor="taskExecutor" throttle-limit="4">
+                <batch:chunk reader="reader" processor="processor" writer="writer" commit-interval="2" />
+            </batch:tasklet>
+        </batch:step>
+    </batch:job>
+
+    <!-- CONFIG JOB LAUNCHER -->
+    <bean id="jobLauncher" class="org.springframework.batch.core.launch.support.SimpleJobLauncher">
+        <property name="jobRepository" ref="jobRepository" />
+    </bean>
+
+</beans>
